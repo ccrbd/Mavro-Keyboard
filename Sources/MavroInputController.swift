@@ -60,9 +60,10 @@ class MavroInputController: IMKInputController {
         riti_config_set_phonetic_suggestion(engineConfig, ModeSettings.current.ritiPhoneticSuggestion)
         riti_config_set_suggestion_include_english(engineConfig, true)
 
-        // ASCII/ANSI (Bijoy) output, à la Windows Avro. riti emits ANSI-encoded
-        // text when enabled (renders correctly under a Bijoy font).
-        riti_config_set_ansi_encoding(engineConfig, ModeSettings.encoding.ritiAnsiEncoding)
+        // riti always emits Unicode; ANSI/Bijoy output (à la Windows Avro) is
+        // applied by the controller on commit via encodeOutput(), so it can
+        // target either SutonnyMJ or Kalpurush from the same Unicode result.
+        riti_config_set_ansi_encoding(engineConfig, false)
 
         engineCtx = riti_context_new_with_config(engineConfig)
     }
@@ -259,8 +260,8 @@ class MavroInputController: IMKInputController {
             if let suggestion = currentSuggestion, !riti_suggestion_is_empty(suggestion) {
                 if riti_suggestion_is_lonely(suggestion) {
                     if let textPtr = riti_suggestion_get_lonely_suggestion(suggestion) {
-                        client.insertText(String(cString: textPtr) as NSString,
-                                          replacementRange: notFoundRange)
+                        let text = encodeOutput(String(cString: textPtr))
+                        client.insertText(text as NSString, replacementRange: notFoundRange)
                         riti_string_free(textPtr)
                     }
                 } else {
@@ -288,7 +289,27 @@ class MavroInputController: IMKInputController {
 
     private func insertBengaliDigit(_ digit: Character, client: any IMKTextInput) {
         let value = Int(String(digit))!
-        client.insertText(String(Self.bengaliDigits[value]) as NSString, replacementRange: notFoundRange)
+        let text = encodeOutput(String(Self.bengaliDigits[value]))
+        client.insertText(text as NSString, replacementRange: notFoundRange)
+    }
+
+    /// Convert a Unicode result to the active output encoding just before it is
+    /// committed to the host app. Marked text and the candidate panel stay
+    /// Unicode (readable) — only the committed output is ANSI when selected.
+    private func encodeOutput(_ unicode: String) -> String {
+        let encoding = ModeSettings.encoding
+        if encoding == .unicode { return unicode }
+        var result = unicode
+        unicode.withCString { cstr in
+            let out = (encoding == .ansiSutonnyMJ)
+                ? mavro_unicode_to_bijoy(cstr)
+                : mavro_unicode_to_ansi(cstr)
+            if let out = out {
+                result = String(cString: out)
+                mavro_free_string(out)
+            }
+        }
+        return result
     }
 
     // MARK: - Text management
@@ -368,7 +389,7 @@ class MavroInputController: IMKInputController {
             riti_context_candidate_committed(engineCtx, commitIndex)
         }
 
-        client.insertText(text as NSString, replacementRange: notFoundRange)
+        client.insertText(encodeOutput(text) as NSString, replacementRange: notFoundRange)
         selectedIndex = 0
         freeSuggestion()
         hideCandidates()

@@ -29,23 +29,29 @@ enum InputMode: Int {
     var hudText: String { self == .raw ? "Raw mode" : "Preview mode" }
 }
 
-/// Output encoding — Unicode (modern) or ANSI/Bijoy (legacy fonts), the
-/// equivalent of Windows Avro's "ASCII" output. Maps onto riti's
-/// `ansi_encoding` flag.
-enum OutputEncoding: Int {
+/// Output encoding — Unicode (modern) or one of two ANSI/Bijoy layouts (legacy
+/// fonts), the equivalent of Windows Avro's "ASCII" output. riti always emits
+/// Unicode; the controller converts committed text to the chosen layout.
+enum OutputEncoding: Int, CaseIterable {
     case unicode = 0
-    case ansi = 1
-
-    var ritiAnsiEncoding: Bool { self == .ansi }
+    case ansiSutonnyMJ = 1
+    case ansiKalpurush = 2
 
     var menuTitle: String {
         switch self {
         case .unicode: return "Unicode (modern)"
-        case .ansi: return "ANSI \u{2014} Bijoy (legacy fonts)"
+        case .ansiSutonnyMJ: return "ANSI \u{2014} SutonnyMJ / classic Bijoy"
+        case .ansiKalpurush: return "ANSI \u{2014} Kalpurush"
         }
     }
 
-    var hudText: String { self == .ansi ? "ANSI (Bijoy) output" : "Unicode output" }
+    var hudText: String {
+        switch self {
+        case .unicode: return "Unicode output"
+        case .ansiSutonnyMJ: return "ANSI \u{00B7} SutonnyMJ"
+        case .ansiKalpurush: return "ANSI \u{00B7} Kalpurush"
+        }
+    }
 }
 
 /// Centralizes reading/writing the active mode + encoding and broadcasting
@@ -75,5 +81,8 @@ enum ModeSettings {
     }
 
     static func toggleMode() { current = (current == .raw) ? .preview : .raw }
-    static func toggleEncoding() { encoding = (encoding == .ansi) ? .unicode : .ansi }
+    /// Cycles Unicode -> SutonnyMJ -> Kalpurush -> Unicode.
+    static func toggleEncoding() {
+        encoding = OutputEncoding(rawValue: (encoding.rawValue + 1) % OutputEncoding.allCases.count) ?? .unicode
+    }
 }

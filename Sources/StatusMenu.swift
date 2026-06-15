@@ -45,7 +45,7 @@ final class StatusMenu: NSObject {
         encHeader.isEnabled = false
         menu.addItem(encHeader)
 
-        for enc in [OutputEncoding.unicode, OutputEncoding.ansi] {
+        for enc in OutputEncoding.allCases {
             let mi = NSMenuItem(title: enc.menuTitle, action: #selector(selectEncoding(_:)), keyEquivalent: "")
             mi.target = self
             mi.tag = enc.rawValue
