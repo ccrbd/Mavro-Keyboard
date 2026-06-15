@@ -1,0 +1,19 @@
+[package]
+name = "mavro-engine"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "macOS FFI wrapper around the riti Bengali input method engine for Mavro Keyboard"
+
+[lib]
+name = "mavro_engine"
+crate-type = ["staticlib"]
+
+[dependencies]
+# riti is the Next-Gen Bengali input method library (MPL-2.0) that also powers
+# OpenBangla Keyboard (Linux) and Lekho (macOS). Mavro reuses it as its engine.
+riti = { git = "https://github.com/OpenBangla/riti.git" }
+
+[profile.release]
+codegen-units = 1
+lto = true

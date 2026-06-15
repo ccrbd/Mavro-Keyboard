@@ -1,0 +1,10 @@
+# Build output
+/build/
+engine/target/
+**/*.rs.bk
+
+# Reference clones (studied, not part of Mavro)
+/references/
+
+# macOS
+.DS_Store
