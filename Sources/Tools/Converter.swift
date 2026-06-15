@@ -80,7 +80,10 @@ final class ConverterWindowController {
         }
 
         unicodeView = makePane("Unicode", x: pad)
-        ansiView = makePane("ANSI (Bijoy)", x: pad * 2 + paneW)
+        // poriborton emits the Kalpurush-ANSI codepoint layout, so preview the
+        // output in that font to render it as real Bengali (not Latin gibberish).
+        ansiView = makePane("ANSI (Bijoy) \u{00B7} Kalpurush ANSI preview", x: pad * 2 + paneW)
+        applyAnsiPreviewFont()
 
         let toAnsi = NSButton(title: "Unicode \u{2192} ANSI", target: self, action: #selector(convertToAnsi))
         toAnsi.bezelStyle = .rounded
@@ -120,7 +123,17 @@ final class ConverterWindowController {
             }
         }
         ansiView?.string = result
-        statusLabel?.stringValue = "Converted Unicode \u{2192} ANSI (Bijoy 2000). Apply a Bijoy/SutonnyMJ font to read it."
+        applyAnsiPreviewFont()
+        statusLabel?.stringValue = "Converted Unicode \u{2192} ANSI. Previewing in Kalpurush ANSI; copy the text to use elsewhere."
+    }
+
+    /// Render the ANSI pane in Kalpurush ANSI (poriborton's target layout) so the
+    /// output reads as Bengali. Falls back to a mono font if it isn't installed.
+    private func applyAnsiPreviewFont() {
+        let font = NSFont(name: "Kalpurush ANSI", size: 20)
+            ?? NSFont(name: "Kalpurush", size: 20)
+            ?? NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
+        ansiView?.font = font
     }
 
     @objc private func convertToUnicode() {
