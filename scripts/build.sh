@@ -31,6 +31,13 @@ mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources/data"
 cp "$RESOURCES_DIR/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 cp "$RESOURCES_DIR/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 cp "$RESOURCES_DIR/data/"*.json "$APP_BUNDLE/Contents/Resources/data/"
+
+# Bundle the redistributable Bengali fonts (registered at launch; also installed
+# system-wide by the DMG installer).
+if [ -d "$PROJECT_ROOT/assets/fonts" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/Fonts"
+    cp "$PROJECT_ROOT/assets/fonts/"*.ttf "$APP_BUNDLE/Contents/Resources/Fonts/" 2>/dev/null || true
+fi
 printf 'APPL????' > "$APP_BUNDLE/Contents/PkgInfo"
 
 # 3. Compile Swift sources

@@ -14,6 +14,10 @@ install: build
 uninstall:
 	@bash scripts/uninstall.sh
 
+# Build a shareable installer DMG (app + fonts + install command)
+dmg:
+	@bash scripts/create_dmg.sh
+
 clean:
 	rm -rf build/
 	cd engine && cargo clean

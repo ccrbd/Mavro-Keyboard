@@ -3,13 +3,27 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import Cocoa
+import CoreText
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusMenu = StatusMenu()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        registerBundledFonts()
         installMainMenu()
         statusMenu.install()
+    }
+
+    /// Register the bundled Bengali fonts for this process so tools (e.g. the
+    /// converter's ANSI preview in Kalpurush ANSI) render correctly even before
+    /// the user installs them system-wide.
+    private func registerBundledFonts() {
+        guard let dir = Bundle.main.resourceURL?.appendingPathComponent("Fonts"),
+              let files = try? FileManager.default.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: nil) else { return }
+        for url in files where ["ttf", "otf"].contains(url.pathExtension.lowercased()) {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
     }
 
     /// An LSUIElement app has no main menu, so standard Edit shortcuts

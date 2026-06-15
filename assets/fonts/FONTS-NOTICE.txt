@@ -1,0 +1,19 @@
+Bundled fonts — sources and licenses
+====================================
+
+All fonts bundled with Mavro are free/open and redistributable.
+
+Ekushey / OmicronLab fonts (free; from the open-source Avro Keyboard assets):
+  • Kalpurush.ttf, kalpurush ANSI.ttf
+  • Siyamrupali.ttf, Siyam Rupali ANSI.ttf
+
+Google Fonts (SIL Open Font License 1.1 — see licenses/<family>-OFL.txt):
+  • Noto Sans Bengali, Noto Serif Bengali
+  • Anek Bangla, Baloo Da 2, Hind Siliguri, Tiro Bangla, Atma, Mina
+
+NOT bundled — SutonnyMJ:
+  SutonnyMJ is a proprietary font shipped with the commercial Bijoy software
+  (Ananda Computers). It is NOT redistributable, so it is intentionally left
+  out. Mavro can still OUTPUT SutonnyMJ-encoded ANSI text; to VIEW it you must
+  install SutonnyMJ yourself. For a fully-open ANSI workflow, use the
+  ANSI (Kalpurush) output with the bundled "kalpurush ANSI" font.

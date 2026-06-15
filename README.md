@@ -23,8 +23,9 @@ than re-derived.
   - **Raw** — deterministic, as-typed transliteration with no autocorrect:
     `sonar → সনার`, `sOnar → সোনার`, `mon → মন`, `moN → মণ`.
   - Toggle modes with **⌘⇧M** (or the menu-bar **ম** menu).
-- **Output encoding**: Unicode (modern) or **ANSI/Bijoy** (legacy fonts, like Avro's
-  "ASCII" output). Toggle with **⌘⇧E**. `ami` → `আমি` (Unicode) / `Avwg` (Bijoy).
+- **Output encoding** (Avro's "ASCII" output): **⌘⇧E** cycles **Unicode → ANSI
+  (SutonnyMJ/classic Bijoy) → ANSI (Kalpurush)**. riti always produces Unicode;
+  the committed text is converted to the chosen layout on commit.
 - **⌘⇧M / ⌘⇧E work only while Mavro is the active input method** (system-level
   hotkeys), so they never disturb apps' normal ⌘-shortcuts in other input sources.
 - **Return** commits the in-progress word *and* sends/newlines in one press.
@@ -69,6 +70,17 @@ Then add it: **System Settings → Keyboard → Input Sources → Edit… → +*
 first-ever install you may need to log out and back in so macOS registers it.
 
 Other targets: `make build`, `make build-debug`, `make uninstall`, `make clean`.
+
+### Shareable installer
+
+`make dmg` builds `build/Mavro-Installer.dmg` — a disk image with `Mavro.app`, a
+double-click **Install Mavro.command**, a Read Me, and font licenses. The app
+bundles a set of free/open Bengali fonts (Ekushey Kalpurush/Siyam Rupali +
+their ANSI variants, and OFL Google fonts: Noto Sans/Serif Bengali, Anek Bangla,
+Baloo Da 2, Hind Siliguri, Tiro Bangla, Atma, Mina); the installer also copies
+them to `~/Library/Fonts`. **SutonnyMJ is not bundled** (proprietary Bijoy font);
+the open **Kalpurush ANSI** is, for a fully-open ANSI workflow. The build is
+ad-hoc signed (not notarized) — recipients right-click → Open the first time.
 
 ## Verify
 
