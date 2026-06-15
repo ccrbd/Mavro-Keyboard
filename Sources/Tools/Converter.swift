@@ -4,27 +4,34 @@
 
 import Cocoa
 
-/// Unicode <-> ANSI (Bijoy/SutonnyMJ) converter.
-///
-/// The two-pane UI is in place. The actual Bijoy mapping is being implemented
-/// against a verified mapping table (Bijoy reorders pre-base vowel signs and
-/// uses font-specific conjunct sequences, so a guessed table would silently
-/// corrupt text). Until then the convert action surfaces that state instead of
-/// emitting wrong output.
+/// Unicode <-> ANSI (Bijoy) converter with a selectable target layout:
+///   - SutonnyMJ / classic Bijoy (ported verified bijoyconverter map; both ways)
+///   - Kalpurush ANSI (poriborton; Unicode -> ANSI only)
+/// The output pane previews in the matching font so it reads as Bengali.
 final class ConverterWindowController {
     static let shared = ConverterWindowController()
+
+    private enum Target: Int { case sutonnyMJ = 0, kalpurushANSI = 1 }
+
     private var window: NSWindow?
     private var unicodeView: NSTextView?
     private var ansiView: NSTextView?
+    private var ansiLabel: NSTextField?
     private var statusLabel: NSTextField?
+    private var target: Target = .sutonnyMJ
 
     func show() {
         if window == nil { build() }
         if let window = window { ToolWindowCoordinator.shared.present(window) }
     }
 
+    // MARK: - Per-target details
+
+    private var ansiFontName: String { target == .sutonnyMJ ? "SutonnyMJ" : "Kalpurush ANSI" }
+    private var targetName: String { target == .sutonnyMJ ? "SutonnyMJ" : "Kalpurush ANSI" }
+
     private func build() {
-        let w: CGFloat = 640, h: CGFloat = 360
+        let w: CGFloat = 660, h: CGFloat = 380
         let win = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: w, height: h),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -33,7 +40,7 @@ final class ConverterWindowController {
         win.title = "Mavro \u{2014} Unicode \u{2194} ANSI Converter"
         win.isReleasedWhenClosed = false
         win.center()
-        win.minSize = NSSize(width: 480, height: 280)
+        win.minSize = NSSize(width: 520, height: 300)
 
         let root = NSView(frame: NSRect(x: 0, y: 0, width: w, height: h))
         root.autoresizingMask = [.width, .height]
@@ -45,7 +52,7 @@ final class ConverterWindowController {
         let paneY = pad + statusH + buttonRowH
         let paneH = h - paneY - pad - 22
 
-        func makePane(_ title: String, x: CGFloat) -> NSTextView {
+        func makePane(_ title: String, x: CGFloat) -> (NSTextView, NSTextField) {
             let label = NSTextField(labelWithString: title)
             label.font = .systemFont(ofSize: 11, weight: .semibold)
             label.textColor = .secondaryLabelColor
@@ -65,8 +72,7 @@ final class ConverterWindowController {
             tv.autoresizingMask = [.width]
             tv.textContainer?.widthTracksTextView = true
             tv.font = .systemFont(ofSize: 16)
-            // Plain text only (so pasted rich text doesn't carry a hard-coded
-            // black color that's invisible in dark mode) + adaptive colors.
+            // Plain text + adaptive colors (visible in dark mode; no pasted color).
             tv.isRichText = false
             tv.usesFontPanel = false
             tv.allowsUndo = true
@@ -76,28 +82,37 @@ final class ConverterWindowController {
             tv.insertionPointColor = .textColor
             scroll.documentView = tv
             root.addSubview(scroll)
-            return tv
+            return (tv, label)
         }
 
-        unicodeView = makePane("Unicode", x: pad)
-        // poriborton emits the Kalpurush-ANSI codepoint layout, so preview the
-        // output in that font to render it as real Bengali (not Latin gibberish).
-        ansiView = makePane("ANSI (Bijoy) \u{00B7} Kalpurush ANSI preview", x: pad * 2 + paneW)
-        applyAnsiPreviewFont()
+        let (uni, _) = makePane("Unicode", x: pad)
+        unicodeView = uni
+        let (ansi, ansiLbl) = makePane("ANSI (Bijoy)", x: pad * 2 + paneW)
+        ansiView = ansi
+        ansiLabel = ansiLbl
 
         let toAnsi = NSButton(title: "Unicode \u{2192} ANSI", target: self, action: #selector(convertToAnsi))
         toAnsi.bezelStyle = .rounded
-        toAnsi.frame = NSRect(x: pad, y: pad + statusH, width: 160, height: 30)
+        toAnsi.frame = NSRect(x: pad, y: pad + statusH, width: 150, height: 30)
         toAnsi.autoresizingMask = [.maxXMargin]
         root.addSubview(toAnsi)
 
         let toUnicode = NSButton(title: "ANSI \u{2192} Unicode", target: self, action: #selector(convertToUnicode))
         toUnicode.bezelStyle = .rounded
-        toUnicode.frame = NSRect(x: pad + 170, y: pad + statusH, width: 160, height: 30)
+        toUnicode.frame = NSRect(x: pad + 158, y: pad + statusH, width: 150, height: 30)
         toUnicode.autoresizingMask = [.maxXMargin]
         root.addSubview(toUnicode)
 
-        let status = NSTextField(labelWithString: "Type or paste Unicode Bengali on the left, then Unicode \u{2192} ANSI.")
+        let picker = NSSegmentedControl(labels: ["SutonnyMJ", "Kalpurush ANSI"],
+                                        trackingMode: .selectOne,
+                                        target: self, action: #selector(targetChanged(_:)))
+        picker.selectedSegment = target.rawValue
+        let pickerW: CGFloat = 230
+        picker.frame = NSRect(x: w - pad - pickerW, y: pad + statusH, width: pickerW, height: 28)
+        picker.autoresizingMask = [.minXMargin]
+        root.addSubview(picker)
+
+        let status = NSTextField(labelWithString: "")
         status.font = .systemFont(ofSize: 11)
         status.textColor = .tertiaryLabelColor
         status.frame = NSRect(x: pad, y: pad - 2, width: w - pad * 2, height: statusH)
@@ -107,6 +122,26 @@ final class ConverterWindowController {
 
         win.contentView = root
         window = win
+
+        applyTargetPresentation()
+    }
+
+    // MARK: - Actions
+
+    @objc private func targetChanged(_ sender: NSSegmentedControl) {
+        target = Target(rawValue: sender.selectedSegment) ?? .sutonnyMJ
+        applyTargetPresentation()
+    }
+
+    /// Update the ANSI pane font + labels to match the selected target.
+    private func applyTargetPresentation() {
+        let font = NSFont(name: ansiFontName, size: 20)
+            ?? NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
+        ansiView?.font = font
+        ansiLabel?.stringValue = "ANSI \u{00B7} \(targetName) preview"
+        statusLabel?.stringValue = target == .sutonnyMJ
+            ? "SutonnyMJ / classic Bijoy \u{2014} converts both directions."
+            : "Kalpurush ANSI \u{2014} Unicode \u{2192} ANSI only (no verified reverse)."
     }
 
     @objc private func convertToAnsi() {
@@ -117,30 +152,36 @@ final class ConverterWindowController {
         }
         var result = ""
         input.withCString { cstr in
-            if let out = mavro_unicode_to_ansi(cstr) {
+            let out = target == .sutonnyMJ ? mavro_unicode_to_bijoy(cstr) : mavro_unicode_to_ansi(cstr)
+            if let out = out {
                 result = String(cString: out)
                 mavro_free_string(out)
             }
         }
         ansiView?.string = result
-        applyAnsiPreviewFont()
-        statusLabel?.stringValue = "Converted Unicode \u{2192} ANSI. Previewing in Kalpurush ANSI; copy the text to use elsewhere."
-    }
-
-    /// Render the ANSI pane in Kalpurush ANSI (poriborton's target layout) so the
-    /// output reads as Bengali. Falls back to a mono font if it isn't installed.
-    private func applyAnsiPreviewFont() {
-        let font = NSFont(name: "Kalpurush ANSI", size: 20)
-            ?? NSFont(name: "Kalpurush", size: 20)
-            ?? NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
-        ansiView?.font = font
+        applyTargetPresentation()
+        statusLabel?.stringValue = "Converted Unicode \u{2192} \(targetName). Preview in \(ansiFontName); copy to use elsewhere."
     }
 
     @objc private func convertToUnicode() {
-        // poriborton (and the wider Avro ecosystem) only ships a verified
-        // forward map; a correct Bijoy -> Unicode reverse is non-trivial and is
-        // not shipped rather than risk silently corrupting text.
-        statusLabel?.stringValue = "ANSI \u{2192} Unicode isn't available yet (no verified reverse mapping)."
-        NSSound.beep()
+        guard target == .sutonnyMJ else {
+            statusLabel?.stringValue = "ANSI \u{2192} Unicode is available for SutonnyMJ only \u{2014} switch the target."
+            NSSound.beep()
+            return
+        }
+        let input = ansiView?.string ?? ""
+        guard !input.isEmpty else {
+            statusLabel?.stringValue = "Enter SutonnyMJ/Bijoy text on the right first."
+            return
+        }
+        var result = ""
+        input.withCString { cstr in
+            if let out = mavro_bijoy_to_unicode(cstr) {
+                result = String(cString: out)
+                mavro_free_string(out)
+            }
+        }
+        unicodeView?.string = result
+        statusLabel?.stringValue = "Converted SutonnyMJ \u{2192} Unicode."
     }
 }

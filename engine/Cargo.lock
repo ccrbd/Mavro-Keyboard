@@ -79,6 +79,7 @@ version = "0.1.0"
 dependencies = [
  "poriborton",
  "riti",
+ "serde_json",
 ]
 
 [[package]]

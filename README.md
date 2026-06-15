@@ -33,9 +33,11 @@ than re-derived.
 - Custom candidate window (keyboard + mouse selectable).
 - **Tools**
   - **Character Map** — click Bengali glyphs to insert them.
-  - **Unicode → ANSI (Bijoy) Converter** — convert Unicode Bengali to Bijoy 2000
-    (legacy fonts), using the same verified `poriborton` mapping riti uses.
-    (Bijoy → Unicode reverse is not yet available — no verified reverse map.)
+  - **Unicode ↔ ANSI (Bijoy) Converter** with a target selector:
+    - **SutonnyMJ / classic Bijoy** — both directions (Unicode↔Bijoy), ported from
+      the verified bijoyconverter.com mapping.
+    - **Kalpurush ANSI** — Unicode→ANSI (via `poriborton`); reverse not available.
+    - Output pane previews in the matching font (SutonnyMJ / Kalpurush ANSI).
 
 ## Architecture
 
@@ -76,7 +78,6 @@ bash scripts/test_engine.sh   # asserts the four reference conversions in Raw mo
 
 ## Roadmap
 
-- Bijoy → Unicode (reverse) conversion, once a verified reverse mapping exists.
 - Notarized signed distribution (DMG) once feature-complete.
 - Polish: preferences, mode-toggle hotkey, menu-bar icon asset.
 

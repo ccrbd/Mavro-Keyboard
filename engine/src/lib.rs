@@ -71,6 +71,94 @@ fn recompose_nukta(input: &str) -> String {
     out
 }
 
+// --- SutonnyMJ / classic Bijoy conversion -----------------------------------
+//
+// Ported from the verified bijoyconverter.com mapping (its ordered
+// {ascii, unicode} list). The algorithm is a sequential substring replace in
+// list order (longest/most-specific combinations first, which is how kar
+// reordering is handled), matching the reference implementation exactly.
+
+use std::sync::OnceLock;
+
+static BIJOY_TABLE_JSON: &str = include_str!("bijoy_table.json");
+
+/// Returns the ordered (unicode, ascii) mapping pairs, parsed once.
+fn bijoy_table() -> &'static Vec<(String, String)> {
+    static TABLE: OnceLock<Vec<(String, String)>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let parsed: serde_json::Value =
+            serde_json::from_str(BIJOY_TABLE_JSON).unwrap_or(serde_json::Value::Null);
+        let mut pairs = Vec::new();
+        if let Some(arr) = parsed.as_array() {
+            for item in arr {
+                if let (Some(ascii), Some(unicode)) = (
+                    item.get("ascii").and_then(|v| v.as_str()),
+                    item.get("unicode").and_then(|v| v.as_str()),
+                ) {
+                    pairs.push((unicode.to_string(), ascii.to_string()));
+                }
+            }
+        }
+        pairs
+    })
+}
+
+fn unicode_to_sutonnymj(input: &str) -> String {
+    let mut s = input.to_string();
+    for (unicode, ascii) in bijoy_table() {
+        if s.contains(unicode.as_str()) {
+            s = s.replace(unicode.as_str(), ascii);
+        }
+    }
+    // Sentence-initial vowel-sign fixups from the reference implementation.
+    s = s.replace(" \u{2021}", " \u{2020}"); // " ‡" -> " †"
+    s = s.replace(" \u{2030}", " \u{02C6}"); // " ‰" -> " ˆ"
+    s
+}
+
+fn sutonnymj_to_unicode(input: &str) -> String {
+    let mut s = input.to_string();
+    for (unicode, ascii) in bijoy_table() {
+        if s.contains(ascii.as_str()) {
+            s = s.replace(ascii.as_str(), unicode.as_str());
+        }
+    }
+    s
+}
+
+fn to_c_string(s: String) -> *mut c_char {
+    match CString::new(s) {
+        Ok(c) => c.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Convert Unicode Bengali to SutonnyMJ / classic Bijoy ANSI. Caller frees with
+/// `mavro_free_string`; NULL on bad input.
+#[no_mangle]
+pub extern "C" fn mavro_unicode_to_bijoy(input: *const c_char) -> *mut c_char {
+    if input.is_null() {
+        return std::ptr::null_mut();
+    }
+    match unsafe { CStr::from_ptr(input) }.to_str() {
+        Ok(t) => to_c_string(unicode_to_sutonnymj(t)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Convert SutonnyMJ / classic Bijoy ANSI back to Unicode Bengali. Caller frees
+/// with `mavro_free_string`; NULL on bad input.
+#[no_mangle]
+pub extern "C" fn mavro_bijoy_to_unicode(input: *const c_char) -> *mut c_char {
+    if input.is_null() {
+        return std::ptr::null_mut();
+    }
+    match unsafe { CStr::from_ptr(input) }.to_str() {
+        Ok(t) => to_c_string(sutonnymj_to_unicode(t)),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 /// Free a string returned by `mavro_*` functions.
 #[no_mangle]
 pub extern "C" fn mavro_free_string(ptr: *mut c_char) {
