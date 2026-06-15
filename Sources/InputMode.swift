@@ -12,20 +12,12 @@ import Foundation
 ///   autocorrect, or suggestions. Each word is committed exactly as parsed:
 ///   `sonar → সনার`, `sOnar → সোনার`, `mon → মন`, `moN → মণ`.
 ///
-/// The distinction maps directly onto riti's `phonetic_suggestion` config flag:
-/// `.preview` sets it `true`, `.raw` sets it `false` (riti then returns a single
-/// "lonely" transliteration that we commit inline).
+/// Maps onto riti's `phonetic_suggestion` flag (`.preview` → true, `.raw` → false).
 enum InputMode: Int {
     case preview = 0
     case raw = 1
 
-    /// Value to pass to `riti_config_set_phonetic_suggestion`.
-    var ritiPhoneticSuggestion: Bool {
-        switch self {
-        case .preview: return true
-        case .raw: return false
-        }
-    }
+    var ritiPhoneticSuggestion: Bool { self == .preview }
 
     var menuTitle: String {
         switch self {
@@ -33,25 +25,55 @@ enum InputMode: Int {
         case .raw: return "Raw (as-typed, no autocorrect)"
         }
     }
+
+    var hudText: String { self == .raw ? "Raw mode" : "Preview mode" }
 }
 
-/// Centralizes reading/writing the active mode and broadcasting changes so any
-/// live `MavroInputController` instance rebuilds its riti context.
-enum ModeSettings {
-    static let defaultsKey = "MavroInputMode"
+/// Output encoding — Unicode (modern) or ANSI/Bijoy (legacy fonts), the
+/// equivalent of Windows Avro's "ASCII" output. Maps onto riti's
+/// `ansi_encoding` flag.
+enum OutputEncoding: Int {
+    case unicode = 0
+    case ansi = 1
 
-    /// Posted whenever the active mode changes. Controllers observe this to
-    /// rebuild the engine with the new `phonetic_suggestion` setting.
-    static let didChange = Notification.Name("MavroInputModeDidChange")
+    var ritiAnsiEncoding: Bool { self == .ansi }
+
+    var menuTitle: String {
+        switch self {
+        case .unicode: return "Unicode (modern)"
+        case .ansi: return "ANSI \u{2014} Bijoy (legacy fonts)"
+        }
+    }
+
+    var hudText: String { self == .ansi ? "ANSI (Bijoy) output" : "Unicode output" }
+}
+
+/// Centralizes reading/writing the active mode + encoding and broadcasting
+/// changes so any live `MavroInputController` rebuilds its riti context.
+enum ModeSettings {
+    private static let modeKey = "MavroInputMode"
+    private static let encodingKey = "MavroOutputEncoding"
+
+    /// Posted whenever mode or encoding changes; controllers observe it to
+    /// rebuild the engine with the new flags.
+    static let didChange = Notification.Name("MavroSettingsDidChange")
 
     static var current: InputMode {
-        get {
-            // Defaults to Preview (the familiar Avro behavior) on first run.
-            InputMode(rawValue: UserDefaults.standard.integer(forKey: defaultsKey)) ?? .preview
-        }
+        get { InputMode(rawValue: UserDefaults.standard.integer(forKey: modeKey)) ?? .preview }
         set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: defaultsKey)
+            UserDefaults.standard.set(newValue.rawValue, forKey: modeKey)
             NotificationCenter.default.post(name: didChange, object: nil)
         }
     }
+
+    static var encoding: OutputEncoding {
+        get { OutputEncoding(rawValue: UserDefaults.standard.integer(forKey: encodingKey)) ?? .unicode }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: encodingKey)
+            NotificationCenter.default.post(name: didChange, object: nil)
+        }
+    }
+
+    static func toggleMode() { current = (current == .raw) ? .preview : .raw }
+    static func toggleEncoding() { encoding = (encoding == .ansi) ? .unicode : .ansi }
 }

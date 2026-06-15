@@ -60,6 +60,10 @@ class MavroInputController: IMKInputController {
         riti_config_set_phonetic_suggestion(engineConfig, ModeSettings.current.ritiPhoneticSuggestion)
         riti_config_set_suggestion_include_english(engineConfig, true)
 
+        // ASCII/ANSI (Bijoy) output, à la Windows Avro. riti emits ANSI-encoded
+        // text when enabled (renders correctly under a Bijoy font).
+        riti_config_set_ansi_encoding(engineConfig, ModeSettings.encoding.ritiAnsiEncoding)
+
         engineCtx = riti_context_new_with_config(engineConfig)
     }
 
@@ -118,6 +122,9 @@ class MavroInputController: IMKInputController {
 
         let modifiers = event.modifierFlags
 
+        // Mode/encoding toggles (⌘M, ⌘E) are handled by HotKeyManager at the
+        // Carbon layer, which preempts the menu — they never reach handle().
+
         // Pass through Cmd/Ctrl shortcuts; commit any ongoing input first.
         if modifiers.contains(.command) || modifiers.contains(.control) {
             if riti_context_ongoing_input_session(engineCtx) {
@@ -128,11 +135,12 @@ class MavroInputController: IMKInputController {
 
         let keyCode = event.keyCode
 
-        // Return / numpad Enter — commit current selection.
+        // Return / numpad Enter — commit the active word, then let Return pass
+        // through so it performs its normal action (newline / send message) in
+        // the SAME keypress. Avoids the iAvro annoyance of needing two presses.
         if keyCode == 36 || keyCode == 76 {
             if riti_context_ongoing_input_session(engineCtx) {
                 commitTopCandidate(client: client)
-                return true
             }
             return false
         }
@@ -214,15 +222,12 @@ class MavroInputController: IMKInputController {
             }
         }
 
-        // Down / Up arrows — navigate candidates.
-        if keyCode == 125 || keyCode == 126 {
+        // Arrow keys (←→↑↓): commit the active word and let the arrow move the
+        // caret in the SAME press (same one-press fix as Return). Candidate
+        // selection in Preview mode uses Tab / Shift-Tab and number keys 1-9.
+        if keyCode == 123 || keyCode == 124 || keyCode == 125 || keyCode == 126 {
             if riti_context_ongoing_input_session(engineCtx) {
-                if inLonelySession() {
-                    commitTopCandidate(client: client)
-                    return false
-                }
-                navigateCandidates(forward: keyCode == 125, client: client)
-                return true
+                commitTopCandidate(client: client)
             }
             return false
         }
@@ -336,21 +341,31 @@ class MavroInputController: IMKInputController {
             return
         }
 
-        let text: String
-        if riti_suggestion_is_lonely(suggestion) {
-            let ptr = riti_suggestion_get_lonely_suggestion(suggestion)
-            text = ptr != nil ? String(cString: ptr!) : ""
-            if let ptr = ptr { riti_string_free(ptr) }
-            // In Raw mode the buffer is filled every keystroke; must end the
-            // session explicitly so the next key starts fresh.
-            riti_context_finish_input_session(engineCtx)
+        let lonely = riti_suggestion_is_lonely(suggestion)
+        let commitIndex: UInt
+        if lonely {
+            commitIndex = 0
         } else {
             let length = riti_suggestion_get_length(suggestion)
-            let safeIndex = UInt(min(index, Int(length) - 1))
-            let ptr = riti_suggestion_get_suggestion(suggestion, safeIndex)
-            text = ptr != nil ? String(cString: ptr!) : ""
-            if let ptr = ptr { riti_string_free(ptr) }
-            riti_context_candidate_committed(engineCtx, safeIndex)
+            commitIndex = UInt(min(index, Int(length) - 1))
+        }
+
+        // Commit via pre_edit_text so the inserted string matches exactly what
+        // was shown inline — crucially including ANSI/Bijoy encoding when on.
+        // (get_suggestion/get_lonely_suggestion always return Unicode, which is
+        // what caused ANSI output to revert to Unicode on commit.)
+        var text = ""
+        if let ptr = riti_suggestion_get_pre_edit_text(suggestion, commitIndex) {
+            text = String(cString: ptr)
+            riti_string_free(ptr)
+        }
+
+        if lonely {
+            // Raw mode fills the buffer every keystroke; end the session so the
+            // next key starts fresh.
+            riti_context_finish_input_session(engineCtx)
+        } else {
+            riti_context_candidate_committed(engineCtx, commitIndex)
         }
 
         client.insertText(text as NSString, replacementRange: notFoundRange)
@@ -454,10 +469,27 @@ class MavroInputController: IMKInputController {
 
     // MARK: - Session lifecycle
 
+    /// Called by the system when the active composition must be finalized —
+    /// e.g. the user clicks elsewhere or focus leaves the field. Without this,
+    /// riti keeps the half-typed word in its buffer and re-commits it on the
+    /// next keystroke, producing a duplicate. Commit it once and reset.
+    override func commitComposition(_ sender: Any!) {
+        guard let client = sender as? (any IMKTextInput) else { return }
+        if riti_context_ongoing_input_session(engineCtx) {
+            commitTopCandidate(client: client)
+        } else {
+            freeSuggestion()
+        }
+        hideCandidates()
+        selectedIndex = 0
+    }
+
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
         selectedIndex = 0
         freeSuggestion()
+        // Mavro is now the focused input method: arm ⌘M / ⌘E.
+        HotKeyManager.shared.acquire()
     }
 
     override func deactivateServer(_ sender: Any!) {
@@ -466,6 +498,8 @@ class MavroInputController: IMKInputController {
         }
         freeSuggestion()
         hideCandidates()
+        // Leaving Mavro: release ⌘M / ⌘E so they behave normally elsewhere.
+        HotKeyManager.shared.release()
         super.deactivateServer(sender)
     }
 }

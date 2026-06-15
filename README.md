@@ -22,7 +22,14 @@ than re-derived.
   - **Preview** — Avro-style dictionary suggestions + autocorrect in a candidate window.
   - **Raw** — deterministic, as-typed transliteration with no autocorrect:
     `sonar → সনার`, `sOnar → সোনার`, `mon → মন`, `moN → মণ`.
-  - Switch modes from the menu-bar **ম** menu.
+  - Toggle modes with **⌘⇧M** (or the menu-bar **ম** menu).
+- **Output encoding**: Unicode (modern) or **ANSI/Bijoy** (legacy fonts, like Avro's
+  "ASCII" output). Toggle with **⌘⇧E**. `ami` → `আমি` (Unicode) / `Avwg` (Bijoy).
+- **⌘⇧M / ⌘⇧E work only while Mavro is the active input method** (system-level
+  hotkeys), so they never disturb apps' normal ⌘-shortcuts in other input sources.
+- **Return** commits the in-progress word *and* sends/newlines in one press.
+- On-screen flash confirms each mode/encoding switch (works even when the menu-bar
+  icon is hidden behind the notch).
 - Custom candidate window (keyboard + mouse selectable).
 - **Tools**
   - **Character Map** — click Bengali glyphs to insert them.

@@ -27,7 +27,7 @@ final class StatusMenu: NSObject {
         menu.addItem(header)
         menu.addItem(.separator())
 
-        let modeHeader = NSMenuItem(title: "Typing Mode", action: nil, keyEquivalent: "")
+        let modeHeader = NSMenuItem(title: "Typing Mode  (toggle: \u{2318}\u{21E7}M)", action: nil, keyEquivalent: "")
         modeHeader.isEnabled = false
         menu.addItem(modeHeader)
 
@@ -36,6 +36,20 @@ final class StatusMenu: NSObject {
             mi.target = self
             mi.tag = mode.rawValue
             mi.state = (ModeSettings.current == mode) ? .on : .off
+            menu.addItem(mi)
+        }
+
+        menu.addItem(.separator())
+
+        let encHeader = NSMenuItem(title: "Output Encoding  (toggle: \u{2318}\u{21E7}E)", action: nil, keyEquivalent: "")
+        encHeader.isEnabled = false
+        menu.addItem(encHeader)
+
+        for enc in [OutputEncoding.unicode, OutputEncoding.ansi] {
+            let mi = NSMenuItem(title: enc.menuTitle, action: #selector(selectEncoding(_:)), keyEquivalent: "")
+            mi.target = self
+            mi.tag = enc.rawValue
+            mi.state = (ModeSettings.encoding == enc) ? .on : .off
             menu.addItem(mi)
         }
 
@@ -58,10 +72,14 @@ final class StatusMenu: NSObject {
         return menu
     }
 
-    private func refreshModeChecks() {
+    private func refreshChecks() {
         guard let menu = statusItem?.menu else { return }
-        for item in menu.items where item.action == #selector(selectMode(_:)) {
-            item.state = (item.tag == ModeSettings.current.rawValue) ? .on : .off
+        for item in menu.items {
+            if item.action == #selector(selectMode(_:)) {
+                item.state = (item.tag == ModeSettings.current.rawValue) ? .on : .off
+            } else if item.action == #selector(selectEncoding(_:)) {
+                item.state = (item.tag == ModeSettings.encoding.rawValue) ? .on : .off
+            }
         }
     }
 
@@ -70,7 +88,13 @@ final class StatusMenu: NSObject {
     @objc private func selectMode(_ sender: NSMenuItem) {
         guard let mode = InputMode(rawValue: sender.tag) else { return }
         ModeSettings.current = mode
-        refreshModeChecks()
+        refreshChecks()
+    }
+
+    @objc private func selectEncoding(_ sender: NSMenuItem) {
+        guard let enc = OutputEncoding(rawValue: sender.tag) else { return }
+        ModeSettings.encoding = enc
+        refreshChecks()
     }
 
     @objc private func openCharacterMap() {
