@@ -13,6 +13,9 @@ crate-type = ["staticlib"]
 # riti is the Next-Gen Bengali input method library (MPL-2.0) that also powers
 # OpenBangla Keyboard (Linux) and Lekho (macOS). Mavro reuses it as its engine.
 riti = { git = "https://github.com/OpenBangla/riti.git" }
+# poriborton provides the same verified Unicode -> Bijoy 2000 (ANSI) conversion
+# riti uses internally; we reuse it for the standalone converter tool.
+poriborton = "0.2"
 
 [profile.release]
 codegen-units = 1

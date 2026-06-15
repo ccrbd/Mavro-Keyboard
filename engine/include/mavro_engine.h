@@ -21,6 +21,15 @@ extern "C" {
  */
 uint16_t mavro_keycode_for_char(uint32_t ch);
 
+/*
+ * Convert Unicode Bengali text to Bijoy 2000 (ANSI) encoding. Returns a heap
+ * string the caller must free with mavro_free_string(); NULL on bad input.
+ */
+char *mavro_unicode_to_ansi(const char *input);
+
+/* Free a string returned by a mavro_* function. */
+void mavro_free_string(char *ptr);
+
 #ifdef __cplusplus
 }
 #endif

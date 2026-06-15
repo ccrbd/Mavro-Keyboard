@@ -86,7 +86,7 @@ final class ConverterWindowController {
         toUnicode.autoresizingMask = [.maxXMargin]
         root.addSubview(toUnicode)
 
-        let status = NSTextField(labelWithString: "Bijoy mapping is under construction \u{2014} conversion not yet active.")
+        let status = NSTextField(labelWithString: "Type or paste Unicode Bengali on the left, then Unicode \u{2192} ANSI.")
         status.font = .systemFont(ofSize: 11)
         status.textColor = .tertiaryLabelColor
         status.frame = NSRect(x: pad, y: pad - 2, width: w - pad * 2, height: statusH)
@@ -99,12 +99,27 @@ final class ConverterWindowController {
     }
 
     @objc private func convertToAnsi() {
-        statusLabel?.stringValue = "Unicode \u{2192} ANSI conversion is not implemented yet."
-        NSSound.beep()
+        let input = unicodeView?.string ?? ""
+        guard !input.isEmpty else {
+            statusLabel?.stringValue = "Enter Unicode Bengali text on the left first."
+            return
+        }
+        var result = ""
+        input.withCString { cstr in
+            if let out = mavro_unicode_to_ansi(cstr) {
+                result = String(cString: out)
+                mavro_free_string(out)
+            }
+        }
+        ansiView?.string = result
+        statusLabel?.stringValue = "Converted Unicode \u{2192} ANSI (Bijoy 2000). Apply a Bijoy/SutonnyMJ font to read it."
     }
 
     @objc private func convertToUnicode() {
-        statusLabel?.stringValue = "ANSI \u{2192} Unicode conversion is not implemented yet."
+        // poriborton (and the wider Avro ecosystem) only ships a verified
+        // forward map; a correct Bijoy -> Unicode reverse is non-trivial and is
+        // not shipped rather than risk silently corrupting text.
+        statusLabel?.stringValue = "ANSI \u{2192} Unicode isn't available yet (no verified reverse mapping)."
         NSSound.beep()
     }
 }

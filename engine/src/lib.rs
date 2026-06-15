@@ -13,10 +13,73 @@
 // The keycode mapping mirrors the canonical mapping used by Lekho (MPL-2.0),
 // since the target values are fixed by riti's `keycodes` module.
 
+use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
+
 // Force riti to be linked so its FFI symbols are included in the static lib.
 extern crate riti;
 
 pub use riti::keycodes;
+
+/// Convert Unicode Bengali text to Bijoy 2000 (ANSI/Windows-1252) encoding, for
+/// the standalone converter tool. Uses the same `poriborton` crate riti uses for
+/// its ANSI typing output, so results match. Returns a heap string the caller
+/// must free with `mavro_free_string`. Returns NULL on bad UTF-8.
+#[no_mangle]
+pub extern "C" fn mavro_unicode_to_ansi(input: *const c_char) -> *mut c_char {
+    if input.is_null() {
+        return std::ptr::null_mut();
+    }
+    let text = match unsafe { CStr::from_ptr(input) }.to_str() {
+        Ok(t) => t,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    // poriborton's map keys the PRECOMPOSED nukta letters (য় U+09DF, ড় U+09DC,
+    // ঢ় U+09DD), which are Unicode composition-exclusions — NFC would wrongly
+    // decompose them. Recompose just those three sequences so both precomposed
+    // and decomposed input convert correctly.
+    let recomposed = recompose_nukta(text);
+    let converted = poriborton::bijoy2000::unicode_to_bijoy(&recomposed);
+    match CString::new(converted) {
+        Ok(c) => c.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Recompose the three Bengali nukta letters from a base + U+09BC sequence into
+/// their precomposed code points (which poriborton's map expects). Precomposed
+/// input passes through unchanged.
+fn recompose_nukta(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if chars.peek() == Some(&'\u{09BC}') {
+            let composed = match c {
+                '\u{09A1}' => Some('\u{09DC}'), // ড + ় -> ড়
+                '\u{09A2}' => Some('\u{09DD}'), // ঢ + ় -> ঢ়
+                '\u{09AF}' => Some('\u{09DF}'), // য + ় -> য়
+                _ => None,
+            };
+            if let Some(rc) = composed {
+                out.push(rc);
+                chars.next(); // consume the nukta
+                continue;
+            }
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// Free a string returned by `mavro_*` functions.
+#[no_mangle]
+pub extern "C" fn mavro_free_string(ptr: *mut c_char) {
+    if !ptr.is_null() {
+        unsafe {
+            let _ = CString::from_raw(ptr);
+        }
+    }
+}
 
 /// Convert a character (from `NSEvent.characters`, as a Unicode scalar value)
 /// into the riti keycode the engine expects. Returns 0 for unmapped characters.
