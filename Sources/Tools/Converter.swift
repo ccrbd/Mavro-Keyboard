@@ -20,8 +20,7 @@ final class ConverterWindowController {
 
     func show() {
         if window == nil { build() }
-        NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
+        if let window = window { ToolWindowCoordinator.shared.present(window) }
     }
 
     private func build() {
@@ -66,6 +65,15 @@ final class ConverterWindowController {
             tv.autoresizingMask = [.width]
             tv.textContainer?.widthTracksTextView = true
             tv.font = .systemFont(ofSize: 16)
+            // Plain text only (so pasted rich text doesn't carry a hard-coded
+            // black color that's invisible in dark mode) + adaptive colors.
+            tv.isRichText = false
+            tv.usesFontPanel = false
+            tv.allowsUndo = true
+            tv.drawsBackground = true
+            tv.backgroundColor = .textBackgroundColor
+            tv.textColor = .textColor
+            tv.insertionPointColor = .textColor
             scroll.documentView = tv
             root.addSubview(scroll)
             return tv

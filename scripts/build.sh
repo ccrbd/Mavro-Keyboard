@@ -41,6 +41,7 @@ SWIFT_SOURCES=(
     "$SOURCES_DIR/CandidatePanel.swift"
     "$SOURCES_DIR/ModeHUD.swift"
     "$SOURCES_DIR/HotKeyManager.swift"
+    "$SOURCES_DIR/ToolWindowCoordinator.swift"
     "$SOURCES_DIR/StatusMenu.swift"
     "$SOURCES_DIR/AppDelegate.swift"
     "$SOURCES_DIR/Tools/CharacterMap.swift"

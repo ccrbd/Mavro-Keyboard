@@ -25,8 +25,7 @@ final class CharacterMapWindowController {
 
     func show() {
         if window == nil { build() }
-        NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
+        if let window = window { ToolWindowCoordinator.shared.present(window) }
     }
 
     private func build() {
