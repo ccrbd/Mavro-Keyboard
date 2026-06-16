@@ -10,10 +10,10 @@
       <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.05"/>
       <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
-    <clipPath id="round"><rect x="32" y="32" width="448" height="448" rx="104" ry="104"/></clipPath>
+    <clipPath id="round"><rect x="20" y="20" width="472.0" height="472.0" rx="115" ry="115"/></clipPath>
   </defs>
-  <rect x="32" y="32" width="448" height="448" rx="104" ry="104" fill="url(#bg)"/>
-  <g clip-path="url(#round)"><ellipse cx="256" cy="70" rx="300" ry="170" fill="url(#sheen)"/></g>
-  <rect x="32.75" y="32.75" width="446.5" height="446.5" rx="103.25" ry="103.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1.5"/>
-  <path transform="translate(143.034,412.000) scale(0.46584,-0.46584)" d="M552 588H451V0L429 22Q384 192 273 228Q248 196 222.0 185.0Q196 174 174 174Q134 174 106.5 200.5Q79 227 79 268Q79 315 114 343Q144 367 195 367Q222 367 239 356Q239 427 208 458Q188 477 131 493Q101 502 79.5 511.5Q58 521 44 530Q23 544 -8 586L-67 644H496ZM398 184V588H126Q213 517 246 471Q299 403 299 325Q299 318 299.0 312.0Q299 306 298 298Q330 271 354.5 243.0Q379 215 396 184Z" fill="#FFFFFF"/>
+  <rect x="20" y="20" width="472.0" height="472.0" rx="115" ry="115" fill="url(#bg)"/>
+  <g clip-path="url(#round)"><ellipse cx="256" cy="48" rx="320" ry="190" fill="url(#sheen)"/></g>
+  <rect x="20.75" y="20.75" width="470.5" height="470.5" rx="114.25" ry="114.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1.5"/>
+  <path transform="translate(124.960,436.000) scale(0.54037,-0.54037)" d="M552 588H451V0L429 22Q384 192 273 228Q248 196 222.0 185.0Q196 174 174 174Q134 174 106.5 200.5Q79 227 79 268Q79 315 114 343Q144 367 195 367Q222 367 239 356Q239 427 208 458Q188 477 131 493Q101 502 79.5 511.5Q58 521 44 530Q23 544 -8 586L-67 644H496ZM398 184V588H126Q213 517 246 471Q299 403 299 325Q299 318 299.0 312.0Q299 306 298 298Q330 271 354.5 243.0Q379 215 396 184Z" fill="#FFFFFF"/>
 </svg>
