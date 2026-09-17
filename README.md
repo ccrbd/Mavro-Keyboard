@@ -7,6 +7,30 @@ Apple winds Rosetta down.
 
 > Status: **v0.2.0** — Avro Phonetic input with iAvro-style, Preview and Raw modes. See [Roadmap](#roadmap).
 
+## Download & install
+
+**[⬇ Download the latest Mavro installer](https://github.com/ccrbd/Mavro-Keyboard/releases/latest)**
+— get `Mavro-Installer-<version>.dmg` from the release's *Assets*. Needs an Apple
+Silicon Mac (M1 or newer) with macOS 13 or later.
+
+Open the DMG. This build isn't notarized by Apple yet, so a plain double-click is
+blocked the first time — install it one of these two ways:
+
+- **Terminal (easiest, no security prompts):** open Terminal (⌘-Space → "Terminal"),
+  type `bash ` (with a space), drag **Install Mavro.command** from the DMG window into
+  Terminal, and press Return.
+- **Double-click:** double-click **Install Mavro.command** → macOS says "Not Opened" →
+  Done. Then open **System Settings → Privacy & Security**, click **Open Anyway**, and
+  enter your password.
+
+The installer adds Mavro to your input sources and installs free Bangla fonts.
+Switch to it with the **Globe (fn)** key or **Control-Space** and start typing.
+If Mavro doesn't appear, add it under **System Settings → Keyboard → Text Input →
+Input Sources → Edit… → + → Bangla → Mavro** (log out and back in if it isn't listed).
+
+While Mavro is active: **⌘⇧M** cycles typing mode (iAvro style → Preview → Raw) and
+**⌘⇧E** cycles output (Unicode → ANSI SutonnyMJ → ANSI Kalpurush).
+
 ## Why
 
 iAvro is an Intel-only build that runs on Apple Silicon only via Rosetta, which Apple
