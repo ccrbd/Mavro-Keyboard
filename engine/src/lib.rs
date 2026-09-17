@@ -76,9 +76,42 @@ fn recompose_nukta(input: &str) -> String {
 // Ported from the verified bijoyconverter.com mapping (its ordered
 // {ascii, unicode} list). The algorithm is a sequential substring replace in
 // list order (longest/most-specific combinations first, which is how kar
-// reordering is handled), matching the reference implementation exactly.
+// reordering is handled). The patches on top (ro-fola, word-initial vowel
+// signs, EXTRA_PRE/POST, reorder_fix) mirror the ANSI-Unicode-Doc-Converter
+// project's src/convert.js, verified there against real documents.
 
+use std::collections::HashSet;
 use std::sync::OnceLock;
+use unicode_normalization::UnicodeNormalization;
+
+/// Legacy glyph patches applied before the main table (ANSI -> Unicode). Wins
+/// over the bare `w` (i-kar) rule so the cluster reorders correctly.
+const EXTRA_PRE: &[(&str, &str)] = &[("w\u{00B4}", "\u{0995}\u{09CD}\u{09AE}\u{09BF}")]; // w´ -> ক্মি
+
+/// Standalone leftover glyphs cleaned up after the main table (ANSI -> Unicode).
+const EXTRA_POST: &[(&str, &str)] = &[
+    ("\u{00B4}", "\u{0995}\u{09CD}\u{09AE}"), // ´ -> ক্ম
+    ("\u{00D1}", "\u{2014}"),                 // Ñ -> — (em dash)
+    ("\u{0192}", "\u{09C2}"),                 // ƒ -> ূ
+    ("\u{00A4}", "\u{09AE}"),                 // ¤ -> ম
+    ("\u{00AF}", "\u{09B8}"),                 // ¯ -> স
+];
+
+/// Whitespace as JavaScript's `\s` defines it, so the word-initial vowel-sign
+/// rule matches the reference implementation exactly.
+fn is_js_whitespace(c: char) -> bool {
+    matches!(
+        c,
+        '\t' | '\n' | '\u{000B}' | '\u{000C}' | '\r' | ' ' | '\u{00A0}' | '\u{1680}'
+            | '\u{2000}'..='\u{200A}' | '\u{2028}' | '\u{2029}' | '\u{202F}' | '\u{205F}'
+            | '\u{3000}' | '\u{FEFF}'
+    )
+}
+
+/// Bengali consonants incl. nukta letters and khanda-ta (reph cluster detection).
+fn is_consonant(c: char) -> bool {
+    matches!(c, '\u{0995}'..='\u{09B9}' | '\u{09DC}'..='\u{09DF}' | '\u{09CE}')
+}
 
 static BIJOY_TABLE_JSON: &str = include_str!("bijoy_table.json");
 
@@ -104,26 +137,131 @@ fn bijoy_table() -> &'static Vec<(String, String)> {
 }
 
 fn unicode_to_sutonnymj(input: &str) -> String {
-    let mut s = input.to_string();
+    // NFC first (e.g. ে+া -> ো), then recompose the nukta letters NFC leaves split.
+    let normalized: String = input.nfc().collect();
+    let mut s = recompose_nukta(&normalized);
     for (unicode, ascii) in bijoy_table() {
         if s.contains(unicode.as_str()) {
             s = s.replace(unicode.as_str(), ascii);
         }
     }
-    // Sentence-initial vowel-sign fixups from the reference implementation.
-    s = s.replace(" \u{2021}", " \u{2020}"); // " ‡" -> " †"
-    s = s.replace(" \u{2030}", " \u{02C6}"); // " ‰" -> " ˆ"
-    s
+    // Ro-fola: the flat table emits "ª", but SutonnyMJ renders ্র as "Ö"
+    // (গ্র -> MÖ). "ª" is exclusively ro-fola in the table, so this is safe.
+    s = s.replace('\u{00AA}', "\u{00D6}");
+    // Word-initial e-kar/ai-kar take the leading glyph form ("‡"->"†", "‰"->"ˆ")
+    // at the start of the string OR after whitespace. The string-start case
+    // matters for typing, where each word is converted on its own at commit.
+    let mut out = String::with_capacity(s.len());
+    let mut prev: Option<char> = None;
+    for c in s.chars() {
+        let word_initial = prev.map_or(true, is_js_whitespace);
+        out.push(match c {
+            '\u{2021}' if word_initial => '\u{2020}',
+            '\u{2030}' if word_initial => '\u{02C6}',
+            _ => c,
+        });
+        prev = Some(c);
+    }
+    out
 }
 
 fn sutonnymj_to_unicode(input: &str) -> String {
+    if input.is_empty() {
+        return String::new();
+    }
+    // Same fast-reject as the reference: skip pairs whose first char isn't in
+    // the original input (no rule ever introduces an ASCII byte).
+    let present: HashSet<char> = input.chars().collect();
+    let first_present = |key: &str| key.chars().next().map_or(false, |c| present.contains(&c));
+
     let mut s = input.to_string();
+    for (ascii, unicode) in EXTRA_PRE {
+        if first_present(ascii) && s.contains(ascii) {
+            s = s.replace(ascii, unicode);
+        }
+    }
     for (unicode, ascii) in bijoy_table() {
-        if s.contains(ascii.as_str()) {
+        if first_present(ascii) && s.contains(ascii.as_str()) {
             s = s.replace(ascii.as_str(), unicode.as_str());
         }
     }
-    s
+    for (ascii, unicode) in EXTRA_POST {
+        if first_present(ascii) && s.contains(ascii) {
+            s = s.replace(ascii, unicode);
+        }
+    }
+    reorder_fix(&s)
+}
+
+/// Unicode-level reordering the flat table can't resolve (ANSI -> Unicode):
+/// chandrabindu after the vowel sign, অ+া -> আ, split ো/ৌ recombined, and a
+/// reph stored after its cluster moved in front of it.
+fn reorder_fix(input: &str) -> String {
+    // 1. ঁ + vowel sign -> vowel sign + ঁ   (পঁুথি -> পুঁথি)
+    let mut s = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{0981}' {
+            if let Some(&k) = chars.peek() {
+                if matches!(k, '\u{09BE}'..='\u{09CC}' | '\u{09D7}') {
+                    s.push(k);
+                    s.push(c);
+                    chars.next();
+                    continue;
+                }
+            }
+        }
+        s.push(c);
+    }
+    // 2-4. অ+া -> আ, ে+া -> ো, ে+ৗ -> ৌ
+    let s = s
+        .replace("\u{0985}\u{09BE}", "\u{0986}")
+        .replace("\u{09C7}\u{09BE}", "\u{09CB}")
+        .replace("\u{09C7}\u{09D7}", "\u{09CC}");
+    // 5. Reph: CLUSTER + র্ (not followed by a consonant) -> র্ + CLUSTER
+    if s.contains("\u{09B0}\u{09CD}") {
+        move_trailing_reph(&s)
+    } else {
+        s
+    }
+}
+
+/// Emulates the reference regex
+/// `(C(?:্C)*)র্(?!C)` -> `র্$1` (greedy, left-to-right, non-overlapping).
+fn move_trailing_reph(input: &str) -> String {
+    let v: Vec<char> = input.chars().collect();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < v.len() {
+        if is_consonant(v[i]) {
+            // Longest run of "্C" pairs after the leading consonant.
+            let mut pairs = 0;
+            while i + 2 + 2 * pairs < v.len()
+                && v[i + 1 + 2 * pairs] == '\u{09CD}'
+                && is_consonant(v[i + 2 + 2 * pairs])
+            {
+                pairs += 1;
+            }
+            // Backtrack from the greediest cluster until "র্" (not before a
+            // consonant) follows it.
+            let matched = (0..=pairs).rev().find_map(|k| {
+                let end = i + 1 + 2 * k;
+                let is_reph = end + 1 < v.len() && v[end] == '\u{09B0}' && v[end + 1] == '\u{09CD}';
+                let followed_by_consonant = end + 2 < v.len() && is_consonant(v[end + 2]);
+                (is_reph && !followed_by_consonant).then_some(end)
+            });
+            if let Some(end) = matched {
+                out.push('\u{09B0}');
+                out.push('\u{09CD}');
+                out.extend(&v[i..end]);
+                i = end + 2;
+                continue;
+            }
+        }
+        out.push(v[i]);
+        i += 1;
+    }
+    out
 }
 
 fn to_c_string(s: String) -> *mut c_char {

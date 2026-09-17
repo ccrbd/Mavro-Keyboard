@@ -31,7 +31,7 @@ final class StatusMenu: NSObject {
         modeHeader.isEnabled = false
         menu.addItem(modeHeader)
 
-        for mode in [InputMode.preview, InputMode.raw] {
+        for mode in InputMode.displayOrder {
             let mi = NSMenuItem(title: mode.menuTitle, action: #selector(selectMode(_:)), keyEquivalent: "")
             mi.target = self
             mi.tag = mode.rawValue

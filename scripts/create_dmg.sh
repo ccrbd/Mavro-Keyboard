@@ -1,12 +1,13 @@
 #!/bin/bash
-# Build a shareable Mavro-Installer.dmg: Mavro.app (fonts bundled) + a
+# Build a shareable Mavro-Installer-<version>.dmg: Mavro.app (fonts bundled) + a
 # double-click installer + Read Me + font licenses.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/build"
 APP="$BUILD/Mavro.app"
-DMG="$BUILD/Mavro-Installer.dmg"
+VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$ROOT/Resources/Info.plist")"
+DMG="$BUILD/Mavro-Installer-$VERSION.dmg"
 VOL="Mavro Keyboard"
 
 # Ensure a fresh release build (with fonts) exists.

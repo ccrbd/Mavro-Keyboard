@@ -14,11 +14,15 @@ class CandidatePanel {
     /// Called when the user clicks a candidate. Parameter is the candidate index.
     var onCandidateSelected: ((Int) -> Void)?
 
-    func show(candidates: [String], auxiliaryText: String, selectedIndex: Int, cursorRect: NSRect) {
+    /// `auxiliaryText` is drawn as a header (omitted when empty); `showsNumbers`
+    /// labels rows 1-9 for modes where number keys pick a candidate.
+    func show(candidates: [String], auxiliaryText: String, showsNumbers: Bool,
+              selectedIndex: Int, cursorRect: NSRect) {
         if panel == nil { createPanel() }
         guard let panel = panel, let contentView = contentView else { return }
 
-        contentView.update(candidates: candidates, auxiliaryText: auxiliaryText, selectedIndex: selectedIndex)
+        contentView.update(candidates: candidates, auxiliaryText: auxiliaryText,
+                           showsNumbers: showsNumbers, selectedIndex: selectedIndex)
 
         let size = contentView.idealSize()
         panel.setContentSize(size)
@@ -74,6 +78,7 @@ class CandidatePanel {
 class CandidateView: NSView {
     private var candidates: [String] = []
     private var auxiliaryText: String = ""
+    private var showsNumbers = true
     private var selectedIndex: Int = 0
     private var scrollOffset: Int = 0
 
@@ -85,9 +90,13 @@ class CandidateView: NSView {
     private let auxHeight: CGFloat = 20
     private let maxVisibleCandidates = 9
 
-    func update(candidates: [String], auxiliaryText: String, selectedIndex: Int) {
+    /// Header band height; collapses when there's no auxiliary text to show.
+    private var headerHeight: CGFloat { auxiliaryText.isEmpty ? 0 : auxHeight }
+
+    func update(candidates: [String], auxiliaryText: String, showsNumbers: Bool, selectedIndex: Int) {
         self.candidates = candidates
         self.auxiliaryText = auxiliaryText
+        self.showsNumbers = showsNumbers
         self.selectedIndex = candidates.isEmpty ? 0 : min(selectedIndex, candidates.count - 1)
         adjustScroll()
         needsDisplay = true
@@ -110,7 +119,7 @@ class CandidateView: NSView {
 
     func idealSize() -> NSSize {
         let visibleCount = min(candidates.count - scrollOffset, maxVisibleCandidates)
-        let height = CGFloat(visibleCount) * rowHeight + auxHeight + padding * 2
+        let height = CGFloat(visibleCount) * rowHeight + headerHeight + padding * 2
         return NSSize(width: 280, height: height)
     }
 
@@ -143,7 +152,7 @@ class CandidateView: NSView {
 
         for i in 0..<visibleCount {
             let candidateIndex = scrollOffset + i
-            let y = bounds.height - auxHeight - padding - CGFloat(i + 1) * rowHeight
+            let y = bounds.height - headerHeight - padding - CGFloat(i + 1) * rowHeight
             let rowRect = NSRect(x: padding, y: y, width: bounds.width - padding * 2, height: rowHeight)
             let isSelected = candidateIndex == selectedIndex
 
@@ -153,16 +162,19 @@ class CandidateView: NSView {
                 hp.fill()
             }
 
-            let numRect = NSRect(x: padding + 4, y: y + 2, width: 22, height: rowHeight - 4)
-            let numAttrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
-                .foregroundColor: isSelected ? NSColor.alternateSelectedControlTextColor
-                                             : NSColor.tertiaryLabelColor,
-            ]
-            "\(candidateIndex + 1)".draw(in: numRect, withAttributes: numAttrs)
+            if showsNumbers {
+                let numRect = NSRect(x: padding + 4, y: y + 2, width: 22, height: rowHeight - 4)
+                let numAttrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
+                    .foregroundColor: isSelected ? NSColor.alternateSelectedControlTextColor
+                                                 : NSColor.tertiaryLabelColor,
+                ]
+                "\(candidateIndex + 1)".draw(in: numRect, withAttributes: numAttrs)
+            }
 
-            let textRect = NSRect(x: padding + 28, y: y + 2,
-                                  width: bounds.width - padding * 2 - 32, height: rowHeight - 4)
+            let textX = padding + (showsNumbers ? 28 : 10)
+            let textRect = NSRect(x: textX, y: y + 2,
+                                  width: bounds.width - textX - padding - 4, height: rowHeight - 4)
             let textAttrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 16),
                 .foregroundColor: isSelected ? NSColor.alternateSelectedControlTextColor
@@ -173,12 +185,12 @@ class CandidateView: NSView {
 
         let indicatorColor = NSColor.tertiaryLabelColor
         if hasMoreAbove {
-            let arrowY = bounds.height - auxHeight - padding - 2
+            let arrowY = bounds.height - headerHeight - padding - 2
             drawTriangle(in: NSRect(x: bounds.width - 20, y: arrowY - 8, width: 12, height: 8),
                          up: true, color: indicatorColor)
         }
         if hasMoreBelow {
-            let arrowY = bounds.height - auxHeight - padding - CGFloat(visibleCount) * rowHeight + 2
+            let arrowY = bounds.height - headerHeight - padding - CGFloat(visibleCount) * rowHeight + 2
             drawTriangle(in: NSRect(x: bounds.width - 20, y: arrowY, width: 12, height: 8),
                          up: false, color: indicatorColor)
         }
@@ -221,7 +233,7 @@ class CandidateView: NSView {
     }
 
     private func candidateIndex(at point: NSPoint) -> Int? {
-        let topOfCandidates = bounds.height - auxHeight - padding
+        let topOfCandidates = bounds.height - headerHeight - padding
         let clickOffset = topOfCandidates - point.y
         guard clickOffset >= 0 else { return nil }
         let rowIndex = Int(clickOffset / rowHeight)

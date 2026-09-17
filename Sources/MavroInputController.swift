@@ -20,6 +20,8 @@ class MavroInputController: IMKInputController {
     private var selectedIndex: UInt = 0
     private var candidatePanel: CandidatePanel?
     private var lastKnownCursorRect: NSRect = .zero
+    /// Active typing mode, refreshed whenever the engine is (re)built.
+    private var mode: InputMode = .iavro
 
     /// Bengali digits ০-৯ indexed by 0-9.
     private static let bengaliDigits: [Character] = [
@@ -41,6 +43,7 @@ class MavroInputController: IMKInputController {
     }
 
     private func initializeEngine() {
+        mode = ModeSettings.current
         engineConfig = riti_config_new()
 
         // Avro Phonetic layout.
@@ -57,8 +60,8 @@ class MavroInputController: IMKInputController {
         // The mode → engine mapping. In Raw mode phonetic_suggestion is OFF, so
         // riti returns a single "lonely" transliteration committed inline with
         // no candidate window.
-        riti_config_set_phonetic_suggestion(engineConfig, ModeSettings.current.ritiPhoneticSuggestion)
-        riti_config_set_suggestion_include_english(engineConfig, true)
+        riti_config_set_phonetic_suggestion(engineConfig, mode.ritiPhoneticSuggestion)
+        riti_config_set_suggestion_include_english(engineConfig, mode.includesEnglishCandidate)
 
         // riti always emits Unicode; ANSI/Bijoy output (à la Windows Avro) is
         // applied by the controller on commit via encodeOutput(), so it can
@@ -185,10 +188,11 @@ class MavroInputController: IMKInputController {
             return false
         }
 
-        // Tab — navigate candidates (Shift+Tab backward).
+        // Tab — Preview: navigate candidates (Shift+Tab backward). Other modes
+        // (like iAvro): commit the word and let the Tab through.
         if keyCode == 48 {
             if riti_context_ongoing_input_session(engineCtx) {
-                if inLonelySession() {
+                if inLonelySession() || !mode.keysPickCandidates {
                     commitTopCandidate(client: client)
                     return false
                 }
@@ -206,8 +210,10 @@ class MavroInputController: IMKInputController {
             return true
         }
 
-        // Digit 1-9 during a session: pick that candidate.
-        if riti_context_ongoing_input_session(engineCtx),
+        // Digit 1-9 during a session: pick that candidate (Preview) or end the
+        // word with a Bengali digit (Raw). In iAvro style the digit falls through
+        // to the engine and is typed into the word, as iAvro did.
+        if mode != .iavro, riti_context_ongoing_input_session(engineCtx),
            let chars = event.characters, let digit = chars.first,
            digit >= "1" && digit <= "9" {
             if inLonelySession() {
@@ -223,9 +229,16 @@ class MavroInputController: IMKInputController {
             }
         }
 
-        // Arrow keys (←→↑↓): commit the active word and let the arrow move the
-        // caret in the SAME press (same one-press fix as Return). Candidate
-        // selection in Preview mode uses Tab / Shift-Tab and number keys 1-9.
+        // ↓/↑ in iAvro style move through the suggestion list, like iAvro.
+        if (keyCode == 125 || keyCode == 126), mode.arrowsChooseCandidates,
+           riti_context_ongoing_input_session(engineCtx), !inLonelySession() {
+            navigateCandidates(forward: keyCode == 125, client: client)
+            return true
+        }
+
+        // Other arrows (and ↑/↓ outside iAvro style): commit the active word and
+        // let the arrow move the caret in the SAME press (same one-press fix as
+        // Return). Preview picks candidates with Tab / Shift-Tab and 1-9 instead.
         if keyCode == 123 || keyCode == 124 || keyCode == 125 || keyCode == 126 {
             if riti_context_ongoing_input_session(engineCtx) {
                 commitTopCandidate(client: client)
@@ -283,7 +296,8 @@ class MavroInputController: IMKInputController {
         } else {
             selectedIndex = selectedIndex == 0 ? UInt(length - 1) : selectedIndex - 1
         }
-        updateMarkedText(client: client)
+        // Inline text follows the selection only where it shows the Bangla word.
+        if !mode.showsTypedTextInline { updateMarkedText(client: client) }
         candidatePanel?.selectCandidate(at: Int(selectedIndex))
     }
 
@@ -323,21 +337,8 @@ class MavroInputController: IMKInputController {
     }
 
     private func updateMarkedText(client: any IMKTextInput) {
-        guard let suggestion = currentSuggestion, !riti_suggestion_is_empty(suggestion) else { return }
-
-        // riti's len() panics on the Single (lonely) variant — never call it here.
-        // get_pre_edit_text(0) works for both variants.
-        let preEditIndex: UInt
-        if riti_suggestion_is_lonely(suggestion) {
-            preEditIndex = 0
-        } else {
-            let length = riti_suggestion_get_length(suggestion)
-            if length == 0 { return }
-            preEditIndex = min(selectedIndex, length - 1)
-        }
-        guard let preEditPtr = riti_suggestion_get_pre_edit_text(suggestion, preEditIndex) else { return }
-        let preEditText = String(cString: preEditPtr)
-        riti_string_free(preEditPtr)
+        guard let suggestion = currentSuggestion, !riti_suggestion_is_empty(suggestion),
+              let preEditText = inlineText(for: suggestion) else { return }
 
         let attrs: [NSAttributedString.Key: Any] = [
             .underlineStyle: NSUnderlineStyle.single.rawValue,
@@ -348,6 +349,30 @@ class MavroInputController: IMKInputController {
             selectionRange: NSRange(location: preEditText.utf16.count, length: 0),
             replacementRange: notFoundRange
         )
+    }
+
+    /// The text to show inline (underlined) while composing: in iAvro style the
+    /// English typed so far (riti's auxiliary text — the raw input buffer),
+    /// otherwise the Bangla word for the current selection.
+    private func inlineText(for suggestion: OpaquePointer) -> String? {
+        // riti panics on len()/auxiliary_text for the Single (lonely) variant.
+        let lonely = riti_suggestion_is_lonely(suggestion)
+        if mode.showsTypedTextInline, !lonely,
+           let auxPtr = riti_suggestion_get_auxiliary_text(suggestion) {
+            defer { riti_string_free(auxPtr) }
+            return String(cString: auxPtr)
+        }
+        let preEditIndex: UInt
+        if lonely {
+            preEditIndex = 0
+        } else {
+            let length = riti_suggestion_get_length(suggestion)
+            if length == 0 { return nil }
+            preEditIndex = min(selectedIndex, length - 1)
+        }
+        guard let preEditPtr = riti_suggestion_get_pre_edit_text(suggestion, preEditIndex) else { return nil }
+        defer { riti_string_free(preEditPtr) }
+        return String(cString: preEditPtr)
     }
 
     private func commitTopCandidate(client: any IMKTextInput) {
@@ -473,7 +498,9 @@ class MavroInputController: IMKInputController {
 
         candidatePanel?.show(
             candidates: candidates,
-            auxiliaryText: auxText,
+            // iAvro style already shows the English inline; skip the header.
+            auxiliaryText: mode.showsTypedTextInline ? "" : auxText,
+            showsNumbers: mode.keysPickCandidates,
             selectedIndex: Int(selectedIndex),
             cursorRect: cursorRect
         )

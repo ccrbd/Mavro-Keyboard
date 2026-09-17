@@ -57,6 +57,55 @@ static int check(const char *word, const char *expected) {
     return ok;
 }
 
+/* Unicode -> SutonnyMJ (or back, when `to_unicode`). Expected values were
+ * hand-verified by rendering in the SutonnyMJ font. */
+static int check_bijoy(const char *in, const char *expected, int to_unicode) {
+    char *got = to_unicode ? mavro_bijoy_to_unicode(in) : mavro_unicode_to_bijoy(in);
+    int ok = got && strcmp(got, expected) == 0;
+    printf("[%s] %s %s -> %s (expected %s)\n", ok ? "PASS" : "FAIL",
+           to_unicode ? "bijoy->uni" : "uni->bijoy", in, got ? got : "(null)", expected);
+    if (got) mavro_free_string(got);
+    return ok;
+}
+
+/* iAvro-style mode shows the typed English inline. It relies on riti's
+ * auxiliary text being exactly the typed buffer when suggestions are on, and
+ * on the phonetic word being among the candidates. */
+static int check_iavro(const char *typed, const char *candidate) {
+    Config *cfg = riti_config_new();
+    riti_config_set_layout_file(cfg, "avro_phonetic");
+    riti_config_set_database_dir(cfg, DATA_DIR);
+    riti_config_set_user_dir(cfg, USER_DIR);
+    riti_config_set_phonetic_suggestion(cfg, true);
+    riti_config_set_suggestion_include_english(cfg, false);
+    RitiContext *ctx = riti_context_new_with_config(cfg);
+
+    Suggestion *s = NULL;
+    for (const char *p = typed; *p; ++p) {
+        if (s) riti_suggestion_free(s);
+        s = riti_get_suggestion_for_key(ctx, mavro_keycode_for_char((unsigned char)*p), 0, 0);
+    }
+    int aux_ok = 0, found = 0;
+    if (s && !riti_suggestion_is_empty(s) && !riti_suggestion_is_lonely(s)) {
+        char *aux = riti_suggestion_get_auxiliary_text(s);
+        aux_ok = aux && strcmp(aux, typed) == 0;
+        if (aux) riti_string_free(aux);
+        for (uintptr_t i = 0; i < riti_suggestion_get_length(s); i++) {
+            char *c = riti_suggestion_get_suggestion(s, i);
+            if (c && strcmp(c, candidate) == 0) found = 1;
+            if (c) riti_string_free(c);
+        }
+    }
+    int ok = aux_ok && found;
+    printf("[%s] iavro %s -> inline \"%s\", candidates include %s\n",
+           ok ? "PASS" : "FAIL", typed, aux_ok ? typed : "?", found ? candidate : "(missing)");
+    if (s) riti_suggestion_free(s);
+    riti_context_finish_input_session(ctx);
+    riti_context_free(ctx);
+    riti_config_free(cfg);
+    return ok;
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) {
         fprintf(stderr, "usage: %s <data_dir> <user_dir>\n", argv[0]);
@@ -70,6 +119,19 @@ int main(int argc, char **argv) {
     ok &= check("sOnar", "সোনার");    /* সোনার */
     ok &= check("mon",   "মন");                       /* মন */
     ok &= check("moN",   "মণ");                       /* মণ */
+
+    /* SutonnyMJ output — words that rendered wrong before the converter fixes. */
+    ok &= check_bijoy("হয়ে", "n‡q", 0);
+    ok &= check_bijoy("দিল্লি", "w`wjø", 0);
+    ok &= check_bijoy("অসন্তোষ", "Am‡šÍvl", 0);
+    ok &= check_bijoy("বিস্তারিত", "we¯ÍvwiZ", 0);
+    ok &= check_bijoy("সিদ্ধান্ত", "wm×všÍ", 0);
+    ok &= check_bijoy("কে", "†K", 0);        /* word committed alone: leading e-kar form */
+    ok &= check_bijoy("গ্রাম", "MÖvg", 0);    /* ro-fola */
+    ok &= check_bijoy("MÖvg", "গ্রাম", 1);
+
+    ok &= check_iavro("ami", "আমি");
+    ok &= check_iavro("bangla", "বাংলা");
 
     printf("\n%s\n", ok ? "ALL PASS" : "SOME FAILED");
     return ok ? 0 : 1;

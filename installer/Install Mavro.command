@@ -1,5 +1,6 @@
 #!/bin/bash
-# Double-click to install Mavro Keyboard + its bundled Bengali fonts.
+# Installs Mavro Keyboard + its bundled Bengali fonts for the current user.
+# Double-click it, or run:  bash "/Volumes/Mavro Keyboard/Install Mavro.command"
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -14,33 +15,55 @@ if [ ! -d "$APP" ]; then
     read -r -p "Press Return to close." _ ; exit 1
 fi
 
-# 1. Install the bundled fonts (so Bengali + ANSI/Bijoy text renders everywhere).
+# 1. Fonts (so Bengali + ANSI/Bijoy text renders everywhere). Clear the download
+#    quarantine only on the files we copy — never touch the user's other fonts.
 mkdir -p "$FONT_DIR"
 if [ -d "$APP/Contents/Resources/Fonts" ]; then
-    cp -f "$APP/Contents/Resources/Fonts/"*.ttf "$FONT_DIR/" 2>/dev/null || true
-    echo "Installed bundled Bengali fonts to $FONT_DIR"
+    for font in "$APP/Contents/Resources/Fonts/"*.ttf; do
+        name="$(basename "$font")"
+        cp -f "$font" "$FONT_DIR/$name"
+        xattr -c "$FONT_DIR/$name" 2>/dev/null || true
+    done
+    echo "Installed bundled Bengali fonts."
 fi
 
-# 2. Install the input method.
+# 2. The input method. Removing the quarantine flag is what lets macOS load this
+#    unsigned (not notarized) build.
 killall Mavro 2>/dev/null || true
 sleep 1
 mkdir -p "$IM_DIR"
 rm -rf "$IM_DIR/Mavro.app"
 cp -R "$APP" "$IM_DIR/"
 xattr -cr "$IM_DIR/Mavro.app" 2>/dev/null || true
+
+# 3. Register + enable it so it appears in the input menu right away.
+if "$IM_DIR/Mavro.app/Contents/MacOS/Mavro" --install; then
+    ENABLED=1
+else
+    ENABLED=0
+fi
 open "$IM_DIR/Mavro.app"
 
-cat <<EOF
+echo
+echo "=== Done ==="
+if [ "$ENABLED" = "1" ]; then
+    echo "Mavro is installed and added to your input sources."
+    echo "Switch to it with the Globe (fn) key or Control-Space, then type."
+else
+    echo "Mavro is installed. Add it once:"
+    echo "  System Settings -> Keyboard -> Text Input -> Input Sources -> Edit... -> +"
+    echo "  -> Bangla -> Mavro -> Add. (If it isn't listed yet, log out and back in.)"
+fi
+cat <<'EOF'
 
-=== Done ===
-Mavro is installed. To start typing Bengali:
-  1. Open System Settings -> Keyboard -> Input Sources -> Edit... -> "+"
-  2. Choose "Bangla" -> "Mavro" -> Add
-  3. Switch to Mavro with the Globe/Fn key or Ctrl-Space
-  (First install: if Mavro isn't listed, log out and back in, then retry.)
+Typing modes (Cmd-Shift-M cycles):
+  iAvro style (default) - English stays inline, Bangla suggestions below.
+                          Up/Down choose, Space or Return commits.
+  Preview               - Bangla inline, numbered suggestions (Tab / 1-9).
+  Raw                   - exactly as typed, no suggestions.
+Output (Cmd-Shift-E cycles): Unicode -> ANSI SutonnyMJ -> ANSI Kalpurush
 
-Shortcuts while typing with Mavro:
-  Cmd-Shift-M  switch Raw / Preview mode
-  Cmd-Shift-E  cycle output: Unicode -> ANSI(SutonnyMJ) -> ANSI(Kalpurush)
+Tip: old iAvro ("Avro Keyboard") no longer works on new macOS - you can remove
+it from Input Sources.
 EOF
 read -r -p "Press Return to close." _

@@ -11,6 +11,12 @@ let kConnectionName = "com.mavro.inputmethod.Mavro_Connection"
 // IMKServer must outlive the process; keep it global.
 var server: IMKServer!
 
+// Installer hook: register + enable the input source, then exit without
+// starting the service.
+if CommandLine.arguments.contains("--install") {
+    exit(InputSourceInstaller.registerAndEnable())
+}
+
 NSLog("Mavro: starting input method service")
 
 autoreleasepool {

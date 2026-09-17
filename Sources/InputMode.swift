@@ -4,29 +4,57 @@
 
 import Foundation
 
-/// Mavro's two typing modes — the core UX requirement.
+/// Mavro's typing modes.
 ///
-/// - `.preview`: Avro-style. riti runs dictionary lookup + autocorrect and
-///   shows a candidate window of suggestions while you type.
+/// - `.iavro`: behaves like iAvro, the original Avro for Mac. The English you
+///   type stays inline (underlined) while Bangla suggestions appear in a plain
+///   list; ↑/↓ choose, Space commits. Digits are typed into the word.
+/// - `.preview`: the Bangla word itself is shown inline, with a numbered
+///   suggestion list (Tab / 1-9 to choose) that includes the English word.
 /// - `.raw`: Deterministic phonetic transliteration with NO dictionary,
 ///   autocorrect, or suggestions. Each word is committed exactly as parsed:
 ///   `sonar → সনার`, `sOnar → সোনার`, `mon → মন`, `moN → মণ`.
 ///
-/// Maps onto riti's `phonetic_suggestion` flag (`.preview` → true, `.raw` → false).
+/// `.iavro` and `.preview` share riti's suggestion engine (whose ordering is a
+/// port of iAvro's); they differ only in how the composition is presented and
+/// driven. Raw values are persisted, so existing ones must not change.
 enum InputMode: Int {
     case preview = 0
     case raw = 1
+    case iavro = 2
 
-    var ritiPhoneticSuggestion: Bool { self == .preview }
+    /// Menu and ⌘⇧M cycle order.
+    static let displayOrder: [InputMode] = [.iavro, .preview, .raw]
+
+    var ritiPhoneticSuggestion: Bool { self != .raw }
+
+    /// iAvro never offered the typed English as a candidate.
+    var includesEnglishCandidate: Bool { self == .preview }
+
+    /// iAvro keeps the typed English inline; the others show the Bangla word.
+    var showsTypedTextInline: Bool { self == .iavro }
+
+    /// ↑/↓ move through the suggestion list instead of committing.
+    var arrowsChooseCandidates: Bool { self == .iavro }
+
+    /// Tab and 1-9 pick candidates (Preview) rather than being typed/committed.
+    var keysPickCandidates: Bool { self == .preview }
 
     var menuTitle: String {
         switch self {
-        case .preview: return "Preview (suggestions + autocorrect)"
-        case .raw: return "Raw (as-typed, no autocorrect)"
+        case .iavro: return "iAvro style (English inline, Bangla suggestions)"
+        case .preview: return "Preview (Bangla inline + numbered suggestions)"
+        case .raw: return "Raw (as-typed, no suggestions)"
         }
     }
 
-    var hudText: String { self == .raw ? "Raw mode" : "Preview mode" }
+    var hudText: String {
+        switch self {
+        case .iavro: return "iAvro style"
+        case .preview: return "Preview mode"
+        case .raw: return "Raw mode"
+        }
+    }
 }
 
 /// Output encoding — Unicode (modern) or one of two ANSI/Bijoy layouts (legacy
@@ -65,7 +93,11 @@ enum ModeSettings {
     static let didChange = Notification.Name("MavroSettingsDidChange")
 
     static var current: InputMode {
-        get { InputMode(rawValue: UserDefaults.standard.integer(forKey: modeKey)) ?? .preview }
+        get {
+            // Fresh installs start in iAvro style — what Mac Avro users expect.
+            guard UserDefaults.standard.object(forKey: modeKey) != nil else { return .iavro }
+            return InputMode(rawValue: UserDefaults.standard.integer(forKey: modeKey)) ?? .iavro
+        }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: modeKey)
             NotificationCenter.default.post(name: didChange, object: nil)
@@ -80,7 +112,12 @@ enum ModeSettings {
         }
     }
 
-    static func toggleMode() { current = (current == .raw) ? .preview : .raw }
+    /// Cycles iAvro style -> Preview -> Raw -> iAvro style.
+    static func toggleMode() {
+        let order = InputMode.displayOrder
+        let next = ((order.firstIndex(of: current) ?? 0) + 1) % order.count
+        current = order[next]
+    }
     /// Cycles Unicode -> SutonnyMJ -> Kalpurush -> Unicode.
     static func toggleEncoding() {
         encoding = OutputEncoding(rawValue: (encoding.rawValue + 1) % OutputEncoding.allCases.count) ?? .unicode
